@@ -1,10 +1,7 @@
-import fetch from 'node-fetch';
+// @ts-ignore
+import fetch from 'fetch-mock/esm/client';
 
 import ExpoClient, { ExpoPushMessage } from '../ExpoClient';
-
-jest.mock('../ExpoClientValues', () => ({
-  requestRetryMinTimeout: 1,
-}));
 
 afterEach(() => {
   (fetch as any).reset();
@@ -26,7 +23,7 @@ describe('sending push notification messages', () => {
     expect(options.headers.get('accept')).toContain('application/json');
     expect(options.headers.get('accept-encoding')).toContain('gzip');
     expect(options.headers.get('content-type')).toContain('application/json');
-    expect(options.headers.get('user-agent')).toMatch(/^expo-server-sdk-node\//);
+    expect(options.headers.get('user-agent')).toMatch(/^expo-push-api-js$/);
     expect(options.headers.get('Authorization')).toBeNull();
   });
 
@@ -45,7 +42,7 @@ describe('sending push notification messages', () => {
     expect(options.headers.get('accept')).toContain('application/json');
     expect(options.headers.get('accept-encoding')).toContain('gzip');
     expect(options.headers.get('content-type')).toContain('application/json');
-    expect(options.headers.get('user-agent')).toMatch(/^expo-server-sdk-node\//);
+    expect(options.headers.get('user-agent')).toMatch(/^expo-push-api-js$/);
     expect(options.headers.get('Authorization')).toContain('Bearer foobar');
   });
 
@@ -53,7 +50,7 @@ describe('sending push notification messages', () => {
     const mockTickets = [{ status: 'ok', id: 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX' }];
     (fetch as any).mock('https://exp.host/--/api/v2/push/send', { data: mockTickets });
 
-    const client = new ExpoClient();
+    const client = new ExpoClient({ compression: 'node_compat' });
 
     const messages = [{ to: 'a', body: new Array(1500).join('?') }];
     expect(JSON.stringify(messages).length).toBeGreaterThan(1024);
@@ -75,11 +72,11 @@ describe('sending push notification messages', () => {
 
     const client = new ExpoClient();
     await expect(client.sendPushNotificationsAsync([{ to: 'a' }])).rejects.toThrowError(
-      `Expected Expo to respond with 1 ticket but got 2`
+      `Expected Expo to respond with 1 ticket but got 2`,
     );
 
     await expect(
-      client.sendPushNotificationsAsync([{ to: 'a' }, { to: 'b' }, { to: 'c' }])
+      client.sendPushNotificationsAsync([{ to: 'a' }, { to: 'b' }, { to: 'c' }]),
     ).rejects.toThrowError(`Expected Expo to respond with 3 tickets but got 2`);
   });
 
@@ -103,7 +100,7 @@ describe('sending push notification messages', () => {
 
     const client = new ExpoClient();
     await expect(client.sendPushNotificationsAsync([])).rejects.toThrowError(
-      `Expo responded with an error`
+      `Expo responded with an error`,
     );
   });
 
@@ -129,7 +126,7 @@ describe('sending push notification messages', () => {
 
     const client = new ExpoClient();
     await expect(client.sendPushNotificationsAsync([])).rejects.toThrowError(
-      `Expo responded with an error`
+      `Expo responded with an error`,
     );
   });
 
@@ -141,7 +138,7 @@ describe('sending push notification messages', () => {
 
     const client = new ExpoClient();
     await expect(client.sendPushNotificationsAsync([])).rejects.toThrowError(
-      `Expo responded with an error`
+      `Expo responded with an error`,
     );
   });
 
@@ -186,7 +183,7 @@ describe('sending push notification messages', () => {
           errors: [{ code: 'RATE_LIMIT_ERROR', message: `Rate limit exceeded` }],
         },
       },
-      { repeat: 3 }
+      { repeat: 3 },
     );
 
     const client = new ExpoClient();
@@ -213,17 +210,17 @@ describe('sending push notification messages', () => {
             errors: [{ code: 'RATE_LIMIT_ERROR', message: `Rate limit exceeded` }],
           },
         },
-        { repeat: 2 }
+        { repeat: 2 },
       )
       .mock(
         'https://exp.host/--/api/v2/push/send',
         { data: mockTickets },
-        { overwriteRoutes: false }
+        { overwriteRoutes: false },
       );
 
     const client = new ExpoClient();
     await expect(client.sendPushNotificationsAsync([{ to: 'a' }, { to: 'b' }])).resolves.toEqual(
-      mockTickets
+      mockTickets,
     );
 
     expect((fetch as any).done()).toBeTruthy();
@@ -257,7 +254,7 @@ describe('retrieving push notification receipts', () => {
 
     const client = new ExpoClient();
     const rejection = expect(
-      client.getPushNotificationReceiptsAsync(['XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX'])
+      client.getPushNotificationReceiptsAsync(['XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX']),
     ).rejects;
     await rejection.toThrowError(`Expected Expo to respond with a map`);
     await rejection.toMatchObject({ data: mockReceipts });
@@ -429,12 +426,12 @@ test('can detect an Expo push token', () => {
   // FCM
   expect(
     ExpoClient.isExpoPushToken(
-      'dOKpuo4qbsM:APA91bHkSmF84ROx7Y-2eMGxc0lmpQeN33ZwDMG763dkjd8yjKK-rhPtiR1OoIWNG5ZshlL8oyxsTnQ5XtahyBNS9mJAvfeE6aHzv_mOF_Ve4vL2po4clMIYYV2-Iea_sZVJF7xFLXih4Y0y88JNYULxFfz-XXXXX'
-    )
+      'dOKpuo4qbsM:APA91bHkSmF84ROx7Y-2eMGxc0lmpQeN33ZwDMG763dkjd8yjKK-rhPtiR1OoIWNG5ZshlL8oyxsTnQ5XtahyBNS9mJAvfeE6aHzv_mOF_Ve4vL2po4clMIYYV2-Iea_sZVJF7xFLXih4Y0y88JNYULxFfz-XXXXX',
+    ),
   ).toBe(false);
   // APNs
   expect(
-    ExpoClient.isExpoPushToken('5fa729c6e535eb568g18fdabd35785fc60f41c161d9d7cf4b0bbb0d92437fda0')
+    ExpoClient.isExpoPushToken('5fa729c6e535eb568g18fdabd35785fc60f41c161d9d7cf4b0bbb0d92437fda0'),
   ).toBe(false);
 });
 

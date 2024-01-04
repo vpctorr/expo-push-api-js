@@ -1,58 +1,73 @@
 {
-  "name": "expo-server-sdk",
+  "name": "expo-push-api",
   "version": "3.7.0",
-  "description": "Server-side library for working with Expo using Node.js",
-  "main": "build/ExpoClient.js",
-  "types": "build/ExpoClient.d.ts",
+  "description": "A cross-platform JavaScript library for sending push notifications with Expo's notification service",
+  "type": "module",
+  "main": "./build/ExpoClient.js",
+  "types": "./build/ExpoClient.d.ts",
+  "exports": {
+    ".": {
+      "import": "./build/ExpoClient.js",
+      "types": "./build/ExpoClient.d.ts"
+    }
+  },
   "files": [
     "build"
   ],
   "scripts": {
-    "build": "./build.sh",
+    "build": "tsc && esbuild --bundle src/ExpoClient.ts --format=esm --target=es2020 --outfile=build/ExpoClient.js",
     "lint": "eslint src",
     "prepare": "yarn build",
-    "test": "jest",
-    "tsc": "tsc",
-    "watch": "tsc --watch"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "eslintConfig": {
     "extends": "universe/node"
   },
   "jest": {
     "coverageDirectory": "<rootDir>/../coverage",
-    "preset": "ts-jest",
-    "rootDir": "src",
-    "testEnvironment": "node"
+    "preset": "ts-jest/presets/default-esm",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {
+      "^.+\\.m?[tj]sx?$": [
+        "ts-jest",
+        {
+          "useESM": true
+        }
+      ]
+    }
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/expo/expo-server-sdk-node.git"
+    "url": "git+https://github.com/vpctorr/expo-push-api-js.git"
   },
   "keywords": [
     "expo",
     "push-notifications"
   ],
-  "author": "support@expo.io",
+  "author": "vpctorr",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/expo/expo-server-sdk-node/issues"
+    "url": "https://github.com/vpctorr/expo-push-api-js/issues"
   },
-  "homepage": "https://github.com/expo/expo-server-sdk-node#readme",
-  "dependencies": {
-    "node-fetch": "^2.6.0",
-    "promise-limit": "^2.7.0",
-    "promise-retry": "^2.0.1"
-  },
+  "homepage": "https://github.com/vpctorr/expo-push-api-js#readme",
   "devDependencies": {
-    "@types/jest": "^27.0.1",
-    "@types/node-fetch": "^2.5.12",
-    "@types/promise-retry": "^1.1.3",
-    "eslint": "^7.32.0",
-    "eslint-config-universe": "^7.0.1",
-    "fetch-mock": "^9.11.0",
-    "jest": "^27.0.6",
-    "prettier": "^2.3.2",
-    "ts-jest": "~27.0.5",
-    "typescript": "^4.3.5"
-  }
+    "@types/jest": "^29.5.11",
+    "esbuild": "^0.19.11",
+    "eslint": "^8.56.0",
+    "eslint-config-universe": "^12.0.0",
+    "fetch-mock": "patch:fetch-mock@npm%3A9.11.0#~/.yarn/patches/fetch-mock-npm-9.11.0-6ebe138f97.patch",
+    "jest": "^29.7.0",
+    "p-limit": "^5.0.0",
+    "p-retry": "^6.2.0",
+    "prettier": "^3.1.1",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "yarn": ">=3.0.0"
+  },
+  "packageManager": "yarn@4.0.2"
 }

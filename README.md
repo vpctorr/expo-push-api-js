@@ -1,20 +1,25 @@
-# expo-server-sdk-node ![Tests](https://github.com/expo/expo-server-sdk-node/workflows/Tests/badge.svg) [![codecov](https://codecov.io/gh/expo/expo-server-sdk-node/branch/master/graph/badge.svg)](https://codecov.io/gh/expo/expo-server-sdk-node)
-Server-side library for working with Expo using Node.js.
+# expo-push-api-js ![Tests](https://github.com/vpctorr/expo-push-api-js/workflows/Tests/badge.svg) [![codecov](https://codecov.io/gh/expo/expo-server-sdk-node/branch/master/graph/badge.svg)](https://codecov.io/gh/expo/expo-server-sdk-node)
 
-If you have problems with the code in this repository, please file issues & bug reports at https://github.com/expo/expo. Thanks!
+A cross-platform JavaScript library for sending push notifications with Expo's notification service
+
+## Differences with expo-server-sdk-node
+
+This exclusively uses cross-platform APIs, such as `TextEncoder` and `CompressionStream` so that it can be used in the browser, Cloudflare Workers, etc.
+
+Key considerations:
+- Requires Node.js v18.x or later, ESM only
+- Since Node.js [doesn't support passing a `ReadableStream` to a Request body](https://github.com/nodejs/help/issues/4126), make sure to use the additional `compression` option like so: `new ExpoClient({ compression: "node_compat" })`
 
 ## Usage
 
-_Note: the following code assumes that you are using JavaScript modules with `import`. If you aren't then you should use the old syntax for the SDK import: `const { Expo } = require('expo-server-sdk')`._
-
 ```bash
-yarn add expo-server-sdk
+yarn add expo-push-api
 ```
 
 ```js
-import { Expo } from 'expo-server-sdk';
+import { Expo } from 'expo-push-api';
 
-// Create a new Expo SDK client
+// Create a new Expo Push API client
 // optionally providing an access token if you have enabled push security
 let expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN });
 
@@ -124,16 +129,3 @@ let receiptIdChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
 })();
 
 ```
-
-## Developing
-
-The source code is in the `src/` directory and babel is used to turn it into ES5 that goes in the `build/` directory.
-
-To build, `npm run build`.
-
-To build and watch for changes, `npm run watch`.
-
-## See Also
-
-  * https://github.com/expo-community/expo-server-sdk-ruby
-  * https://github.com/expo-community/expo-server-sdk-python

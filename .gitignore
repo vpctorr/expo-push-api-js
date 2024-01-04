@@ -7,8 +7,15 @@ node_modules/
 # Tests
 /coverage/
 
-# Yarn
-/yarn-error.log
-
 # Build output
 /build/
+
+# Yarn
+yarn-debug.log*
+yarn-error.log*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions

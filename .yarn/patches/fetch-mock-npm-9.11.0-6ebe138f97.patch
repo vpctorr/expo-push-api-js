@@ -1,0 +1,13 @@
+diff --git a/esm/client.js b/esm/client.js
+index 41d858c0a12bc97594a30efab0c14db4e9f1da94..148d4015243dd418bcf5816bad07878350ba0de0 100644
+--- a/esm/client.js
++++ b/esm/client.js
+@@ -4806,7 +4806,7 @@ const statusTextMap = {
+ 
+ var statusText = statusTextMap;
+ 
+-const theGlobal = typeof window !== 'undefined' ? window : self;
++const theGlobal = global;
+ const { setUrlImplementation } = requestUtils;
+ setUrlImplementation(theGlobal.URL);
+ 

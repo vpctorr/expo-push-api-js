@@ -1,17 +1,5 @@
-/**
- * expo-server-sdk
- *
- * Use this if you are running Node on your server backend when you are working with Expo
- * https://expo.io
- */
-import assert from 'assert';
-import { Agent } from 'http';
-import fetch, { Headers, Response as FetchResponse } from 'node-fetch';
-import promiseLimit from 'promise-limit';
-import promiseRetry from 'promise-retry';
-import zlib from 'zlib';
-
-import { requestRetryMinTimeout } from './ExpoClientValues';
+import promiseLimit from 'p-limit';
+import promiseRetry from 'p-retry';
 
 const BASE_URL = 'https://exp.host';
 const BASE_API_URL = `${BASE_URL}/--/api/v2`;
@@ -33,22 +21,24 @@ const PUSH_NOTIFICATION_RECEIPT_CHUNK_LIMIT = 300;
  */
 const DEFAULT_CONCURRENT_REQUEST_LIMIT = 6;
 
+const REQUEST_RETRY_OPTIONS = { retries: 2, factor: 2, minTimeout: 1000 };
+
 export class Expo {
   static pushNotificationChunkSizeLimit = PUSH_NOTIFICATION_CHUNK_LIMIT;
   static pushNotificationReceiptChunkSizeLimit = PUSH_NOTIFICATION_RECEIPT_CHUNK_LIMIT;
 
-  private httpAgent: Agent | undefined;
   private limitConcurrentRequests: <T>(thunk: () => Promise<T>) => Promise<T>;
   private accessToken: string | undefined;
+  private compression: 'enabled' | 'node_compat' | 'disabled';
 
   constructor(options: ExpoClientOptions = {}) {
-    this.httpAgent = options.httpAgent;
     this.limitConcurrentRequests = promiseLimit(
       options.maxConcurrentRequests != null
         ? options.maxConcurrentRequests
-        : DEFAULT_CONCURRENT_REQUEST_LIMIT
+        : DEFAULT_CONCURRENT_REQUEST_LIMIT,
     );
     this.accessToken = options.accessToken;
+    this.compression = options.compression ?? 'enabled';
   }
 
   /**
@@ -79,28 +69,19 @@ export class Expo {
 
     const data = await this.limitConcurrentRequests(async () => {
       return await promiseRetry(
-        async (retry): Promise<any> => {
-          try {
-            return await this.requestAsync(`${BASE_API_URL}/push/send`, {
-              httpMethod: 'post',
-              body: messages,
-              shouldCompress(body) {
-                return body.length > 1024;
-              },
-            });
-          } catch (e: any) {
-            // if Expo servers rate limit, retry with exponential backoff
-            if (e.statusCode === 429) {
-              return retry(e);
-            }
-            throw e;
-          }
+        async () => {
+          return await this.requestAsync(`${BASE_API_URL}/push/send`, {
+            httpMethod: 'post',
+            body: messages,
+            shouldCompress(body) {
+              return body.length > 1024;
+            },
+          });
         },
         {
-          retries: 2,
-          factor: 2,
-          minTimeout: requestRetryMinTimeout,
-        }
+          ...REQUEST_RETRY_OPTIONS,
+          shouldRetry: (error: any) => error.statusCode === 429, // if Expo servers rate limit, retry with exponential backoff
+        },
       );
     });
 
@@ -108,7 +89,7 @@ export class Expo {
       const apiError: ExtensibleError = new Error(
         `Expected Expo to respond with ${actualMessagesCount} ${
           actualMessagesCount === 1 ? 'ticket' : 'tickets'
-        } but got ${data.length}`
+        } but got ${data.length}`,
       );
       apiError.data = data;
       throw apiError;
@@ -118,7 +99,7 @@ export class Expo {
   }
 
   async getPushNotificationReceiptsAsync(
-    receiptIds: ExpoPushReceiptId[]
+    receiptIds: ExpoPushReceiptId[],
   ): Promise<{ [id: string]: ExpoPushReceipt }> {
     const data = await this.requestAsync(`${BASE_API_URL}/push/getReceipts`, {
       httpMethod: 'post',
@@ -130,7 +111,7 @@ export class Expo {
 
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       const apiError: ExtensibleError = new Error(
-        `Expected Expo to respond with a map from receipt IDs to receipts but received data of another type`
+        `Expected Expo to respond with a map from receipt IDs to receipts but received data of another type`,
       );
       apiError.data = data;
       throw apiError;
@@ -208,13 +189,12 @@ export class Expo {
   }
 
   private async requestAsync(url: string, options: RequestOptions): Promise<any> {
-    let requestBody: string | Buffer | undefined;
+    let requestBody: BodyInit | undefined;
 
-    const sdkVersion = require('../package.json').version;
     const requestHeaders = new Headers({
       Accept: 'application/json',
       'Accept-Encoding': 'gzip, deflate',
-      'User-Agent': `expo-server-sdk-node/${sdkVersion}`,
+      'User-Agent': `expo-push-api-js`,
     });
     if (this.accessToken) {
       requestHeaders.set('Authorization', `Bearer ${this.accessToken}`);
@@ -222,9 +202,11 @@ export class Expo {
 
     if (options.body != null) {
       const json = JSON.stringify(options.body);
-      assert(json != null, `JSON request body must not be null`);
-      if (options.shouldCompress(json)) {
-        requestBody = await gzipAsync(Buffer.from(json));
+      if (json === null) {
+        throw new Error(`JSON request body must not be null`);
+      }
+      if (options.shouldCompress(json) && this.compression !== 'disabled') {
+        requestBody = await gzipAsync(json, this.compression === 'node_compat');
         requestHeaders.set('Content-Encoding', 'gzip');
       } else {
         requestBody = json;
@@ -237,7 +219,6 @@ export class Expo {
       method: options.httpMethod,
       body: requestBody,
       headers: requestHeaders,
-      agent: this.httpAgent,
     });
 
     if (response.status !== 200) {
@@ -250,7 +231,7 @@ export class Expo {
     let result: ApiResult;
     try {
       result = JSON.parse(textBody);
-    } catch (e) {
+    } catch {
       const apiError = await this.getTextResponseErrorAsync(response, textBody);
       throw apiError;
     }
@@ -263,12 +244,12 @@ export class Expo {
     return result.data;
   }
 
-  private async parseErrorResponseAsync(response: FetchResponse): Promise<Error> {
+  private async parseErrorResponseAsync(response: Response): Promise<Error> {
     const textBody = await response.text();
     let result: ApiResult;
     try {
       result = JSON.parse(textBody);
-    } catch (e) {
+    } catch {
       return await this.getTextResponseErrorAsync(response, textBody);
     }
 
@@ -281,9 +262,9 @@ export class Expo {
     return this.getErrorFromResult(response, result);
   }
 
-  private async getTextResponseErrorAsync(response: FetchResponse, text: string): Promise<Error> {
+  private async getTextResponseErrorAsync(response: Response, text: string): Promise<Error> {
     const apiError: ExtensibleError = new Error(
-      `Expo responded with an error with status code ${response.status}: ` + text
+      `Expo responded with an error with status code ${response.status}: ` + text,
     );
     apiError.statusCode = response.status;
     apiError.errorText = text;
@@ -294,9 +275,11 @@ export class Expo {
    * Returns an error for the first API error in the result, with an optional `others` field that
    * contains any other errors.
    */
-  private getErrorFromResult(response: FetchResponse, result: ApiResult): Error {
-    assert(result.errors && result.errors.length > 0, `Expected at least one error from Expo`);
-    const [errorData, ...otherErrorData] = result.errors!;
+  private getErrorFromResult(response: Response, result: ApiResult): Error {
+    if (!result.errors || !result.errors[0]) {
+      throw new Error(`Expected at least one error from Expo`);
+    }
+    const [errorData, ...otherErrorData] = result.errors;
     const error: ExtensibleError = this.getErrorFromResultError(errorData);
     if (otherErrorData.length) {
       error.others = otherErrorData.map((data) => this.getErrorFromResultError(data));
@@ -337,22 +320,23 @@ export class Expo {
 
 export default Expo;
 
-function gzipAsync(data: Buffer): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    zlib.gzip(data, (error, result) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(result);
-      }
-    });
-  });
+async function gzipAsync(data: string, stringOutput = false) {
+  const byteArray = new TextEncoder().encode(data);
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  await writer.write(byteArray);
+  await writer.close();
+  return stringOutput ? await new Response(cs.readable).text() : cs.readable;
 }
 
 export type ExpoClientOptions = {
-  httpAgent?: Agent;
   maxConcurrentRequests?: number;
   accessToken?: string;
+  /**
+   * Set to `node_compat` if the Fetch API implementation you're using doesn't support passing a `ReadableStream` to a Request body.
+   * @default 'enabled'
+   */
+  compression?: 'enabled' | 'node_compat' | 'disabled';
 };
 
 export type ExpoPushToken = string;
